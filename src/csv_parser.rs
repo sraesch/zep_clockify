@@ -1,6 +1,6 @@
 use std::{io::{Read, BufReader, BufRead}};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 /// A single returned token
 #[derive(Clone, Debug)]
@@ -31,29 +31,114 @@ impl<T> ReaderResult<T> {
 }
 
 pub trait CSVReader {
-    fn headers(&mut self, headers: &[String]);
+    /// The first record is the header record of the table.
+    /// This event is being called in the beginning.
+    ///
+    /// # Arguments
+    /// * `header` - The header record.
+    fn header_record(&mut self, header: Vec<String>);
+
+    /// Consumes all further records after the header record.
+    /// 
+    /// # Arguments
+    /// * `record` - The parsed record to consume.
     fn record(&mut self, record: &[String]);
-    fn eof(&mut self);
 }
 
 pub struct CSVParser<R: Read> {
     reader: BufReader<R>,
-    cur_line: String,
-    cur_line_pos: usize,
+    cur_line: Vec<char>,
+
+    /// The cursor position in the current line
+    cur_line_cursor: usize,
+
+    /// The line index
+    line_index: usize, 
 }
 
 impl<R: Read> CSVParser<R> {
     pub fn new(r: R) -> Self {
         Self {
             reader: BufReader::new(r),
-            cur_line: String::new(),
-            cur_line_pos: 0,
+            cur_line: Vec::new(),
+            cur_line_cursor: 0,
+            line_index: 0,
         }
     }
 
-    // pub fn read(&mut self) -> Result<()> {
-         
-    // }
+    /// Reads the CSV data and all loader events are delegated to the given reader.
+    ///
+    /// # Arguments
+    /// * `reader` - The reader which consumes the events. 
+    pub fn read<CR: CSVReader>(&mut self, reader: &mut CR) -> Result<()> {
+        let header = self.read_header_record()?;
+        reader.header_record(header.clone());
+
+        // read all other records and stop when EOF has been reached
+        let mut record: Vec<String> = vec![String::new(); header.len()];
+        loop {
+            match self.read_record(&mut record)? {
+                ReaderResult::Data(_) => {
+                    reader.record(&record);
+                }
+                ReaderResult::Eof => {
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Reads and returns the header record
+    fn read_header_record(&mut self) -> Result<Vec<String>> {
+        let mut result: Vec<String> = Vec::new();
+
+        loop {
+            match self.read_token()? {
+                ReaderResult::Data(token) => {
+                    result.push(token.value);
+                    if !token.further_tokens {
+                        return Ok(result);
+                    }
+                }
+                ReaderResult::Eof => {
+                    bail!("Line {}: Got unexpected end", self.line_index);
+                }
+            }
+        }
+    }
+
+    /// Reads a single record and stores the result in the provided reference.
+    /// 
+    /// # Arguments
+    /// * `record` - The reference to store the record.
+    fn read_record(&mut self, record: &mut [String]) -> Result<ReaderResult<()>> {
+        let num_columns = record.len();
+
+        for (index, column) in record.iter_mut().enumerate() {
+            match self.read_token()? {
+                ReaderResult::Data(t) => {
+                    *column = t.value;
+                    let is_last = index + 1 == num_columns;
+                    if t.further_tokens && is_last {
+                        bail!("Line {}: Got too many columns for record", self.line_index);
+                    } else if !t.further_tokens && !is_last {
+                        bail!("Line {}: Got too few columns for record", self.line_index);
+                    }
+                }
+                ReaderResult::Eof => {
+                    if index == 0 {
+                        return Ok(ReaderResult::Eof);
+                    } else {
+                        bail!("Line {}: Got unexpected end", self.line_index);
+                    }
+                }
+            }
+        }
+
+        Ok(ReaderResult::Data(()))
+    }
 
     /// Reads a token from the internal reader
     fn read_token(&mut self) -> Result<ReaderResult<Token>> {
@@ -65,7 +150,7 @@ impl<R: Read> CSVParser<R> {
                 if c == '"' {
                     '"'
                 } else if c == ';' {
-                    let further_tokens = self.cur_line_pos < self.cur_line.len();
+                    let further_tokens = self.cur_line_cursor < self.cur_line.len();
 
                     return Ok(ReaderResult::Data(Token { value: token, further_tokens }));
                 } else {
@@ -90,11 +175,11 @@ impl<R: Read> CSVParser<R> {
             }
 
             // process next chunk...
-            let line = &self.cur_line[self.cur_line_pos..];
+            let line = &self.cur_line[self.cur_line_cursor..];
             match line.find(delimiter) {
                 Some(idx) => {
-                    token += &line[..idx];
-                    self.cur_line_pos += idx + 1;
+                    (&line[..idx]).add_to_str(&mut token);
+                    self.cur_line_cursor += idx + 1;
 
                     if delimiter == ';' {
                         return Ok(ReaderResult::Data(Token { value: token, further_tokens: true }));
@@ -103,19 +188,19 @@ impl<R: Read> CSVParser<R> {
                         let line = &line[(idx + 1)..];
                         match line.find(';') {
                             Some(idx) => {
-                                self.cur_line_pos += idx + 1;
+                                self.cur_line_cursor += idx + 1;
                                 return Ok(ReaderResult::Data(Token { value: token, further_tokens: true }));
                             }
                             None => { // we've reached the end of the record
-                                self.cur_line_pos = self.cur_line.len();
+                                self.cur_line_cursor = self.cur_line.len();
                                 return Ok(ReaderResult::Data(Token { value: token, further_tokens: false }));
                             }
                         }
                     }
                 }
                 None => {
-                    token += line;
-                    self.cur_line_pos = self.cur_line.len();
+                    line.add_to_str(&mut token);
+                    self.cur_line_cursor = self.cur_line.len();
 
                     if delimiter != '"' {
                         return Ok(ReaderResult::Data(Token { value: token, further_tokens: false }));
@@ -131,8 +216,8 @@ impl<R: Read> CSVParser<R> {
     fn read_char(&mut self) -> Result<ReaderResult<char>> {
         match self.check_line_buffer()? {
             ReaderResult::Data(_) => {
-                let c = self.cur_line.chars().nth(self.cur_line_pos).unwrap();
-                self.cur_line_pos += 1;
+                let c = self.cur_line[self.cur_line_cursor];
+                self.cur_line_cursor += 1;
 
                 Ok(ReaderResult::Data(c))
             }
@@ -143,7 +228,7 @@ impl<R: Read> CSVParser<R> {
 
     /// Checks and updated the internal line buffer if needed.
     fn check_line_buffer(&mut self) -> Result<ReaderResult> {
-        if self.cur_line.len() == self.cur_line_pos {
+        if self.cur_line.len() == self.cur_line_cursor {
             self.update_line()
         } else {
             Ok(ReaderResult::Data(()))
@@ -152,21 +237,25 @@ impl<R: Read> CSVParser<R> {
 
     /// Returns true if a new line could be read and false if we reached EOF
     fn update_line(&mut self) -> Result<ReaderResult> {
-        let mut line = String::new();
-        let len = self.reader.read_line(&mut line)?;
-
-        if line.ends_with('\n') {
-            line.pop();
+        // read line and remove trailing line break if available
+        let mut s = String::new();        
+        let len = self.reader.read_line(&mut s)?;
+        if s.ends_with('\n') {
+            s.pop();
         }
 
+        // update the current line buffer
+        self.cur_line.clear();
+        self.cur_line.extend(s.chars());
+
+        // increase internal line index
+        self.line_index += 1;
+
+        // we've reached EOF if the returned line length is 0
         if len == 0 {
             Ok(ReaderResult::Eof)
         } else {
-            self.cur_line = line;
-            self.cur_line_pos = 0;
-
-            
-
+            self.cur_line_cursor = 0;
             Ok(ReaderResult::Data(()))
         }
     }
@@ -258,5 +347,21 @@ mod test {
             assert!(!t5.further_tokens);
             assert_eq!(t5.value, "123");
         }
+    }
+}
+
+trait CharOperations {
+    fn find(&self, c: char) -> Option<usize>;
+    fn add_to_str(&self, rhs: &mut String);
+}
+
+impl CharOperations for &[char] {
+    #[inline]
+    fn find(&self, c0: char) -> Option<usize> {
+        self.iter().position(|c| *c == c0)
+    }
+
+    fn add_to_str(&self, rhs: &mut String) {
+        rhs.extend(self.iter());
     }
 }
