@@ -1,6 +1,6 @@
-use std::{io::{Read, BufReader, BufRead}};
+use std::io::{BufRead, BufReader, Read};
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 /// A single returned token
 #[derive(Clone, Debug)]
@@ -13,7 +13,7 @@ pub struct Token {
 }
 
 /// A status value being returned by the reader
-enum ReaderResult<T = ()> {
+pub enum ReaderResult<T = ()> {
     /// Reader read more data
     Data(T),
 
@@ -30,68 +30,37 @@ impl<T> ReaderResult<T> {
     }
 }
 
-pub trait CSVReader {
-    /// The first record is the header record of the table.
-    /// This event is being called in the beginning.
-    ///
-    /// # Arguments
-    /// * `header` - The header record.
-    fn header_record(&mut self, header: Vec<String>);
-
-    /// Consumes all further records after the header record.
-    /// 
-    /// # Arguments
-    /// * `record` - The parsed record to consume.
-    fn record(&mut self, record: &[String]);
-}
-
 pub struct CSVParser<R: Read> {
     reader: BufReader<R>,
+
+    /// The number of columns
+    num_columns: usize,
+
+    /// The characters of the current line
     cur_line: Vec<char>,
 
     /// The cursor position in the current line
     cur_line_cursor: usize,
 
     /// The line index
-    line_index: usize, 
+    line_index: usize,
 }
 
 impl<R: Read> CSVParser<R> {
     pub fn new(r: R) -> Self {
         Self {
             reader: BufReader::new(r),
+            num_columns: 0,
             cur_line: Vec::new(),
             cur_line_cursor: 0,
             line_index: 0,
         }
     }
 
-    /// Reads the CSV data and all loader events are delegated to the given reader.
-    ///
-    /// # Arguments
-    /// * `reader` - The reader which consumes the events. 
-    pub fn read<CR: CSVReader>(&mut self, reader: &mut CR) -> Result<()> {
-        let header = self.read_header_record()?;
-        reader.header_record(header.clone());
-
-        // read all other records and stop when EOF has been reached
-        let mut record: Vec<String> = vec![String::new(); header.len()];
-        loop {
-            match self.read_record(&mut record)? {
-                ReaderResult::Data(_) => {
-                    reader.record(&record);
-                }
-                ReaderResult::Eof => {
-                    break;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     /// Reads and returns the header record
-    fn read_header_record(&mut self) -> Result<Vec<String>> {
+    pub fn read_header_record(&mut self) -> Result<Vec<String>> {
+        assert!(self.num_columns == 0, "Already read header record");
+
         let mut result: Vec<String> = Vec::new();
 
         loop {
@@ -99,6 +68,7 @@ impl<R: Read> CSVParser<R> {
                 ReaderResult::Data(token) => {
                     result.push(token.value);
                     if !token.further_tokens {
+                        self.num_columns = result.len();
                         return Ok(result);
                     }
                 }
@@ -110,17 +80,17 @@ impl<R: Read> CSVParser<R> {
     }
 
     /// Reads a single record and stores the result in the provided reference.
-    /// 
+    ///
     /// # Arguments
     /// * `record` - The reference to store the record.
-    fn read_record(&mut self, record: &mut [String]) -> Result<ReaderResult<()>> {
-        let num_columns = record.len();
+    pub fn read_record(&mut self, record: &mut [String]) -> Result<ReaderResult<()>> {
+        assert!(self.num_columns > 0);
 
         for (index, column) in record.iter_mut().enumerate() {
             match self.read_token()? {
                 ReaderResult::Data(t) => {
                     *column = t.value;
-                    let is_last = index + 1 == num_columns;
+                    let is_last = index + 1 == self.num_columns;
                     if t.further_tokens && is_last {
                         bail!("Line {}: Got too many columns for record", self.line_index);
                     } else if !t.further_tokens && !is_last {
@@ -152,7 +122,10 @@ impl<R: Read> CSVParser<R> {
                 } else if c == ';' {
                     let further_tokens = self.cur_line_cursor < self.cur_line.len();
 
-                    return Ok(ReaderResult::Data(Token { value: token, further_tokens }));
+                    return Ok(ReaderResult::Data(Token {
+                        value: token,
+                        further_tokens,
+                    }));
                 } else {
                     token.push(c);
                     ';'
@@ -182,18 +155,28 @@ impl<R: Read> CSVParser<R> {
                     self.cur_line_cursor += idx + 1;
 
                     if delimiter == ';' {
-                        return Ok(ReaderResult::Data(Token { value: token, further_tokens: true }));
+                        return Ok(ReaderResult::Data(Token {
+                            value: token,
+                            further_tokens: true,
+                        }));
                     } else {
                         // check if we can find semicolon
                         let line = &line[(idx + 1)..];
                         match line.find(';') {
                             Some(idx) => {
                                 self.cur_line_cursor += idx + 1;
-                                return Ok(ReaderResult::Data(Token { value: token, further_tokens: true }));
+                                return Ok(ReaderResult::Data(Token {
+                                    value: token,
+                                    further_tokens: true,
+                                }));
                             }
-                            None => { // we've reached the end of the record
+                            None => {
+                                // we've reached the end of the record
                                 self.cur_line_cursor = self.cur_line.len();
-                                return Ok(ReaderResult::Data(Token { value: token, further_tokens: false }));
+                                return Ok(ReaderResult::Data(Token {
+                                    value: token,
+                                    further_tokens: false,
+                                }));
                             }
                         }
                     }
@@ -203,7 +186,10 @@ impl<R: Read> CSVParser<R> {
                     self.cur_line_cursor = self.cur_line.len();
 
                     if delimiter != '"' {
-                        return Ok(ReaderResult::Data(Token { value: token, further_tokens: false }));
+                        return Ok(ReaderResult::Data(Token {
+                            value: token,
+                            further_tokens: false,
+                        }));
                     } else {
                         token.push('\n');
                     }
@@ -221,9 +207,8 @@ impl<R: Read> CSVParser<R> {
 
                 Ok(ReaderResult::Data(c))
             }
-            ReaderResult::Eof => Ok(ReaderResult::Eof)
+            ReaderResult::Eof => Ok(ReaderResult::Eof),
         }
-
     }
 
     /// Checks and updated the internal line buffer if needed.
@@ -238,7 +223,7 @@ impl<R: Read> CSVParser<R> {
     /// Returns true if a new line could be read and false if we reached EOF
     fn update_line(&mut self) -> Result<ReaderResult> {
         // read line and remove trailing line break if available
-        let mut s = String::new();        
+        let mut s = String::new();
         let len = self.reader.read_line(&mut s)?;
         if s.ends_with('\n') {
             s.pop();

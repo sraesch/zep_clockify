@@ -2,7 +2,7 @@ use std::{path::Path, fs::File};
 use anyhow::Result;
 use log::debug;
 
-use crate::csv_parser::{CSVParser, CSVReader};
+use crate::csv_parser::{CSVParser, ReaderResult};
 
 pub struct Project {
     name: String,
@@ -11,50 +11,39 @@ pub struct Project {
 
 impl Project {
 
+fn print_header_record(header: &[String]) {
+    debug!("Received Header:");
+    for (column_index, column) in header.iter().enumerate() {
+        debug!("({}): {}", column_index + 1, column);
+    }
+    debug!("END");
 }
 
-struct ProjectsReader {
-    header: Vec<String>,
-    projects: Vec<Project>,
-}
-
-impl ProjectsReader {
-    pub fn new() -> Self {
-        Self{
-            projects: Vec::new(),
-            header: Vec::new(),
-        }
+fn print_record(header: &[String], record: &[String]) {
+    debug!("Received Header:");
+    for (column_index, (name, column)) in header.iter().zip(record.iter()).enumerate() {
+        debug!("({}): {} = {}", column_index + 1, name, column);
     }
-}
-
-impl CSVReader for ProjectsReader {
-    fn header_record(&mut self, header: Vec<String>) {
-        debug!("Received Header:");
-        for (column_index, column) in header.iter().enumerate() {
-            debug!("({}): {}", column_index + 1, column);
-        }
-        debug!("END");
-
-        self.header = header;
-        self.header.iter_mut().for_each(|h| *h = h.replace('\n', " "));
-    }
-
-    fn record(&mut self, record: &[String]) {
-        debug!("Received Header:");
-        for (column_index, (name, column)) in self.header.iter().zip(record.iter()).enumerate() {
-            debug!("({}): {} = {}", column_index + 1, name, column);
-        }
-        debug!("END");
-    }
+    debug!("END");
 }
 
 pub fn load_projects(file_name: &Path) -> Result<Vec<Project>> {
     let file = File::open(file_name)?;
-    let mut rdr = CSVParser::new(file);
+    let mut parser = CSVParser::new(file);
 
-    let mut project_reader = ProjectsReader::new();
+    let mut header = parser.read_header_record()?;
+    header.iter_mut().for_each(|h| *h = h.replace('\n', " "));
+    print_header_record(&header);
 
-    rdr.read(&mut project_reader)?;
+    let mut record = vec![String::new(); header.len()];
 
-    Ok(project_reader.projects)
+    loop {
+        match parser.read_record(&mut record)? {
+            ReaderResult::Data(_) => {
+                print_record(&header, &record);
+            }
+            ReaderResult::Eof => break,
+        }
+    }
+    Ok(Vec::new())
 }
