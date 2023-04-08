@@ -1,49 +1,49 @@
-use std::{path::Path, fs::File};
 use anyhow::Result;
-use log::debug;
+use std::{fs::File, path::Path};
 
-use crate::csv_parser::{CSVParser, ReaderResult};
+use crate::csv_deserialize::{deserialize_csv, StructInfo};
 
+#[derive(Default, Clone)]
 pub struct Project {
+    id: u32,
     name: String,
     description: String,
 }
 
-impl Project {
+impl StructInfo for Project {
+    const NUM_FIELDS: usize = 3;
 
-fn print_header_record(header: &[String]) {
-    debug!("Received Header:");
-    for (column_index, column) in header.iter().enumerate() {
-        debug!("({}): {}", column_index + 1, column);
+    fn get_field_name(index: usize) -> &'static str {
+        match index {
+            0 => "ID",
+            1 => "Abbreviation",
+            2 => "Description",
+            _ => panic!("Index {} is out of range", index),
+        }
     }
-    debug!("END");
-}
 
-fn print_record(header: &[String], record: &[String]) {
-    debug!("Received Header:");
-    for (column_index, (name, column)) in header.iter().zip(record.iter()).enumerate() {
-        debug!("({}): {} = {}", column_index + 1, name, column);
+    fn parse_field(&mut self, index: usize, s: &str) -> Result<(), anyhow::Error> {
+        match index {
+            0 => {
+                self.id = s.parse()?;
+            }
+            1 => {
+                self.name = s.parse()?;
+            }
+            2 => {
+                self.description = s.parse()?;
+            }
+            _ => panic!("Index {} is out of range", index),
+        }
+
+        Ok(())
     }
-    debug!("END");
 }
 
 pub fn load_projects(file_name: &Path) -> Result<Vec<Project>> {
     let file = File::open(file_name)?;
-    let mut parser = CSVParser::new(file);
 
-    let mut header = parser.read_header_record()?;
-    header.iter_mut().for_each(|h| *h = h.replace('\n', " "));
-    print_header_record(&header);
+    let projects: Vec<Project> = deserialize_csv(file)?;
 
-    let mut record = vec![String::new(); header.len()];
-
-    loop {
-        match parser.read_record(&mut record)? {
-            ReaderResult::Data(_) => {
-                print_record(&header, &record);
-            }
-            ReaderResult::Eof => break,
-        }
-    }
-    Ok(Vec::new())
+    Ok(projects)
 }

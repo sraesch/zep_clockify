@@ -1,12 +1,13 @@
-mod projects_loader;
-mod options;
 mod csv_parser;
+mod csv_deserialize;
+mod options;
+mod projects_loader;
 
 use std::path::Path;
 
-use anyhow::{Result};
-use log::{info, error};
-use options::{Options, Operation};
+use anyhow::Result;
+use log::{error, info};
+use options::{Operation, Options};
 use projects_loader::load_projects;
 
 fn run_projects(csv_path: &Path) -> Result<()> {
@@ -23,7 +24,7 @@ fn run_program() -> Result<()> {
     options.dump_to_log();
 
     match options.operation {
-        Operation::Projects => run_projects(&options.csv_path)
+        Operation::Projects => run_projects(&options.csv_path),
     }
 }
 
@@ -42,6 +43,6 @@ fn main() {
             error!("Error: {}", err);
 
             std::process::exit(-1);
-        },
+        }
     }
 }
