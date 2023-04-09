@@ -17,8 +17,8 @@ fn run_projects(csv_path: &Path) -> Result<()> {
     let projects = load_projects(csv_path)?;
     for project in projects.iter() {
         info!(
-            "ID={}, Name={}, Description={}",
-            project.id, project.name, project.description
+            "ID={}, Status={}, Name={}, Description={}",
+            project.id, project.status, project.name, project.description
         );
     }
 
