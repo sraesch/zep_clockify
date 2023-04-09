@@ -76,3 +76,32 @@ where
 
     Ok(records)
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use struct_info::StructInfoDerive;
+
+    #[test]
+    fn test_derive_struct_info() {
+        #[derive(Clone, Default, StructInfoDerive)]
+        struct MyStruct {
+            pub a: i32,
+            pub b: i32,
+        };
+
+        assert_eq!(MyStruct::NUM_FIELDS, 2);
+        assert_eq!(MyStruct::get_field_name(0), "a");
+        assert_eq!(MyStruct::get_field_name(1), "b");
+
+        let mut s: MyStruct = Default::default();
+        s.parse_field(0, "5").unwrap();
+
+        assert_eq!(s.a, 5);
+        assert_eq!(s.b, 0);
+
+        s.parse_field(1, "42").unwrap();
+        assert_eq!(s.a, 5);
+        assert_eq!(s.b, 42);
+    }
+}

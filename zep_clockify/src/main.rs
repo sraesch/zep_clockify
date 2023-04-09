@@ -1,5 +1,5 @@
-mod csv_parser;
 mod csv_deserialize;
+mod csv_parser;
 mod options;
 mod projects_loader;
 
