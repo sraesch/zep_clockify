@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn;
+use syn::{Expr, Field, Ident};
 
-#[proc_macro_derive(StructInfoDerive)]
+#[proc_macro_derive(StructInfoDerive, attributes(StructInfoName))]
 pub fn struct_info_derive(input: TokenStream) -> TokenStream {
     // Construct a representation of Rust code as a syntax tree
     // that we can manipulate
@@ -13,6 +13,48 @@ pub fn struct_info_derive(input: TokenStream) -> TokenStream {
     impl_struct_info(&ast)
 }
 
+/// Tries to convert the expression to an identifier. This only works if the expression is a
+/// string.
+///
+/// # Arguments
+/// * `expr` - The expression to convert.
+fn try_expr_to_string(expr: &Expr) -> Option<Ident> {
+    match expr {
+        Expr::Lit(l) => match &l.lit {
+            syn::Lit::Str(s) => s.parse().unwrap(),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Tries to return the attributed field name if one is defined.
+///
+/// # Arguments
+/// * `field` - The field whose attributes will be checked.
+fn get_attribute_name(field: &Field) -> Option<Ident> {
+    for attribute in field.attrs.iter() {
+        match &attribute.meta {
+            syn::Meta::NameValue(name_value) => {
+                if name_value.path.is_ident("StructInfoName") {
+                    match try_expr_to_string(&name_value.value) {
+                        Some(ident) => return Some(ident),
+                        None => return None,
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// The implementation for the struct info derive macro, that automatically generates the
+/// StructInfo trait implementation from the parsed struct.
+///
+/// # Arguments
+/// `ast` - The parsed struct
 fn impl_struct_info(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
@@ -34,9 +76,16 @@ fn impl_struct_info(ast: &syn::DeriveInput) -> TokenStream {
     match &s.fields {
         syn::Fields::Named(named) => {
             for (index, field) in named.named.iter().enumerate() {
+                let attribute_name = get_attribute_name(field);
                 let name = field.ident.as_ref().unwrap();
+
+                let attribute_name = match &attribute_name {
+                    Some(a) => a,
+                    _ => name,
+                };
+
                 field_names.extend(quote!(
-                    #index => stringify!(#name),
+                    #index => stringify!(#attribute_name),
                 ));
 
                 field_parsing.extend(quote!(

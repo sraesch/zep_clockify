@@ -86,12 +86,13 @@ mod test {
     fn test_derive_struct_info() {
         #[derive(Clone, Default, StructInfoDerive)]
         struct MyStruct {
+            #[StructInfoName = "foobar"]
             pub a: i32,
             pub b: i32,
-        };
+        }
 
         assert_eq!(MyStruct::NUM_FIELDS, 2);
-        assert_eq!(MyStruct::get_field_name(0), "a");
+        assert_eq!(MyStruct::get_field_name(0), "foobar");
         assert_eq!(MyStruct::get_field_name(1), "b");
 
         let mut s: MyStruct = Default::default();

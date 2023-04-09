@@ -15,6 +15,12 @@ fn run_projects(csv_path: &Path) -> Result<()> {
 
     info!("Load input {}...", csv_path.to_string_lossy());
     let projects = load_projects(csv_path)?;
+    for project in projects.iter() {
+        info!(
+            "ID={}, Name={}, Description={}",
+            project.id, project.name, project.description
+        );
+    }
 
     Ok(())
 }
