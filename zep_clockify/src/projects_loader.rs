@@ -4,7 +4,7 @@ use std::{fmt::Display, fs::File, path::Path, str::FromStr};
 
 use struct_info::StructInfoDerive;
 
-use crate::csv_deserialize::{deserialize_csv, StructInfo};
+use crate::csv_deserialize::{deserialize_csv, CSVParsing, StructInfo};
 
 #[derive(Clone, Copy, Default, Debug, Display)]
 pub enum Status {
@@ -14,15 +14,17 @@ pub enum Status {
     Planning,
 }
 
-impl FromStr for Status {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+impl CSVParsing for Status {
+    fn csv_parse(&mut self, s: &str) -> Result<(), anyhow::Error> {
         match s {
-            "active" => Ok(Self::Active),
-            "planning" => Ok(Self::Planning),
+            "active" => *self = Self::Active,
+            "planning" => *self = Self::Planning,
             _ => bail!("Unknown status {}", s),
         }
+
+        Ok(())
+    }
+}
     }
 }
 

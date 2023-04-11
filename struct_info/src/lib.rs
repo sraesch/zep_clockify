@@ -95,7 +95,7 @@ fn impl_struct_info(ast: &syn::DeriveInput) -> TokenStream {
 
                 field_parsing.extend(quote!(
                     #index => {
-                        self.#name = s.parse()?;
+                        self.#name.csv_parse(s)?;
                     },
                 ));
             }

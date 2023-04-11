@@ -4,6 +4,7 @@ use anyhow::{bail, Result};
 
 use crate::csv_parser::{CSVParser, ReaderResult};
 
+/// General trait for a struct to provide infos and parsing methods
 pub trait StructInfo: Clone + Default {
     const NUM_FIELDS: usize;
 
@@ -19,6 +20,10 @@ pub trait StructInfo: Clone + Default {
     /// * `index` - The index of the field
     /// * `s` - The string to parse from
     fn parse_field(&mut self, index: usize, s: &str) -> Result<(), anyhow::Error>;
+}
+
+pub trait CSVParsing {
+    fn csv_parse(&mut self, s: &str) -> Result<(), anyhow::Error>;
 }
 
 /// Creates a map from the struct field indices to the CSV column indices.
@@ -75,6 +80,34 @@ where
     }
 
     Ok(records)
+}
+
+impl CSVParsing for i32 {
+    fn csv_parse(&mut self, s: &str) -> Result<(), anyhow::Error> {
+        *self = s.parse()?;
+        Ok(())
+    }
+}
+
+impl CSVParsing for u32 {
+    fn csv_parse(&mut self, s: &str) -> Result<(), anyhow::Error> {
+        *self = s.parse()?;
+        Ok(())
+    }
+}
+
+impl CSVParsing for String {
+    fn csv_parse(&mut self, s: &str) -> Result<(), anyhow::Error> {
+        *self = s.parse()?;
+        Ok(())
+    }
+}
+
+impl CSVParsing for f32 {
+    fn csv_parse(&mut self, s: &str) -> Result<(), anyhow::Error> {
+        *self = s.parse()?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
