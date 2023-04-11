@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Expr, Field, Ident};
+use syn::{Expr, Field};
 
 #[proc_macro_derive(StructInfoDerive, attributes(StructInfoName))]
 pub fn struct_info_derive(input: TokenStream) -> TokenStream {
@@ -18,10 +18,13 @@ pub fn struct_info_derive(input: TokenStream) -> TokenStream {
 ///
 /// # Arguments
 /// * `expr` - The expression to convert.
-fn try_expr_to_string(expr: &Expr) -> Option<Ident> {
+fn try_expr_to_string(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Lit(l) => match &l.lit {
-            syn::Lit::Str(s) => s.parse().unwrap(),
+            syn::Lit::Str(s) => {
+                let s = s.value();
+                Some(s)
+            }
             _ => None,
         },
         _ => None,
@@ -32,13 +35,15 @@ fn try_expr_to_string(expr: &Expr) -> Option<Ident> {
 ///
 /// # Arguments
 /// * `field` - The field whose attributes will be checked.
-fn get_attribute_name(field: &Field) -> Option<Ident> {
+fn get_attribute_name(field: &Field) -> Option<String> {
     for attribute in field.attrs.iter() {
         match &attribute.meta {
             syn::Meta::NameValue(name_value) => {
                 if name_value.path.is_ident("StructInfoName") {
                     match try_expr_to_string(&name_value.value) {
-                        Some(ident) => return Some(ident),
+                        Some(name) => {
+                            return Some(name);
+                        }
                         None => return None,
                     }
                 }
@@ -79,13 +84,13 @@ fn impl_struct_info(ast: &syn::DeriveInput) -> TokenStream {
                 let attribute_name = get_attribute_name(field);
                 let name = field.ident.as_ref().unwrap();
 
-                let attribute_name = match &attribute_name {
+                let attribute_name = match attribute_name {
                     Some(a) => a,
-                    _ => name,
+                    _ => name.to_string(),
                 };
 
                 field_names.extend(quote!(
-                    #index => stringify!(#attribute_name),
+                    #index => #attribute_name,
                 ));
 
                 field_parsing.extend(quote!(
