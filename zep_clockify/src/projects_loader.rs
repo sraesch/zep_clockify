@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use chrono::NaiveDate;
 use enum_display_derive::Display;
 use std::{fmt::Display, fs::File, path::Path, str::FromStr};
 
@@ -25,6 +26,12 @@ impl CSVParsing for Status {
         Ok(())
     }
 }
+
+impl CSVParsing for NaiveDate {
+    fn csv_parse(&mut self, s: &str) -> Result<(), anyhow::Error> {
+        // DD.MM.YYYY
+        *self = NaiveDate::parse_from_str(s, "%d.%m.%Y")?;
+        Ok(())
     }
 }
 
@@ -41,6 +48,9 @@ pub struct Project {
 
     #[StructInfoName = "Description"]
     pub description: String,
+
+    #[StructInfoName = "Start date"]
+    pub start_date: NaiveDate,
 }
 
 pub fn load_projects(file_name: &Path) -> Result<Vec<Project>> {
