@@ -86,11 +86,16 @@ fn parse_args() -> Result<Option<Options>> {
     }))
 }
 
-fn command_list(options: Options) -> Result<()> {
-    let client = Client::new(options.config.clone());
+async fn command_list(options: Options) -> Result<()> {
+    let client = Client::new(options.config.clone()).await?;
 
     match options.resource {
-        Resource::Workspace => {}
+        Resource::Workspace => {
+            let workspaces = client.get_workspaces().await?;
+            for workspace in workspaces.iter() {
+                println!("ID={}, Name={}", workspace.id, workspace.name);
+            }
+        }
         _ => {
             bail!("Resource {:?} not implemented yet", options.resource);
         }
@@ -99,14 +104,18 @@ fn command_list(options: Options) -> Result<()> {
     Ok(())
 }
 
-/// Runs the program
-fn run_program(options: Options) -> Result<()> {
+/// Runs the program with the given program options
+///
+/// # Arguments
+/// * `options` - The program options to run the program with.
+async fn run_program(options: Options) -> Result<()> {
     match options.command {
-        Command::List => command_list(options),
+        Command::List => command_list(options).await,
     }
 }
 
-pub fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     let options = match parse_args() {
         Ok(options) => match options {
             Some(options) => options,
@@ -120,13 +129,16 @@ pub fn main() {
         }
     };
 
-    match run_program(options) {
+    match run_program(options).await {
         Ok(()) => {
             println!("SUCCESS");
+            Ok(())
         }
         Err(err) => {
             eprintln!("Error: {}", err);
             eprintln!("FAILED");
+
+            Err(err)
         }
     }
 }
