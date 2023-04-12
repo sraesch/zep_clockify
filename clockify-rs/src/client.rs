@@ -31,9 +31,20 @@ impl Client {
         })
     }
 
+    /// Returns a list of the existing workspaces.
     pub async fn get_workspaces(&self) -> Result<Vec<Workspace>, Error> {
         let uri = self.uri_builder.get_workspaces();
+        self.get_resource(uri).await
+    }
 
+    /// Sends a GET request to the specified URI to deserialize a json afterwards.
+    ///
+    /// # Arguments
+    /// * `uri` - The URI to which the request will be sent.
+    pub async fn get_resource<T>(&self, uri: &Uri) -> Result<T, Error>
+    where
+        T: serde::de::DeserializeOwned,
+    {
         let req = match Request::builder()
             .method(Method::GET)
             .uri(uri)
@@ -68,8 +79,8 @@ impl Client {
 
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
 
-        let workspaces: Vec<Workspace> = serde_json::from_reader(body_bytes.reader())?;
+        let s: T = serde_json::from_reader(body_bytes.reader())?;
 
-        Ok(workspaces)
+        Ok(s)
     }
 }
