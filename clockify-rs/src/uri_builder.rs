@@ -40,6 +40,11 @@ impl URIBuilder {
         &self.workspaces_uri
     }
 
+    pub fn get_projects(&self, workspace_id: &str) -> Result<Uri, Error> {
+        let sub_path = format!("workspaces/{}/projects", workspace_id);
+        Self::build_uri(&self.base_uri, &sub_path)
+    }
+
     /// Builds full api uri from the given base uri.
     ///
     /// # Arguments

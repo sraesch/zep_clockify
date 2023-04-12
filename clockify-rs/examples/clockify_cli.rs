@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use std::str::FromStr;
 
-use clockify_rs::{self, Client, Config};
+use clockify_rs::{Client, Config};
 
 /// The type of resource that is specified
 #[derive(Clone, Copy, PartialEq, PartialOrd, Ord, Eq, Debug)]
@@ -44,6 +44,7 @@ struct Options {
     pub config: clockify_rs::Config,
     pub command: Command,
     pub resource: Resource,
+    pub workspace_id: String,
 }
 
 /// Prints the usage of the CLI.
@@ -54,7 +55,7 @@ fn print_usage() {
     println!("");
     println!("There are the following resource available:");
     println!("workspace: A workspace that potentially contains multiple projects");
-    println!("project: Projects within a workspace");
+    println!("project: Projects within a workspace. Needs to specify the workspace ID.");
 }
 
 /// Parses the API key from the environment variable API_KEY.
@@ -65,12 +66,16 @@ fn parse_api_key() -> Result<String> {
 
 /// Parses all arguments provided by the program arguments and environment variables.
 fn parse_args() -> Result<Option<Options>> {
+    let mut workspace_id = String::new();
+
     let args: Vec<String> = std::env::args().collect();
     let args = &args[1..];
 
-    if args.len() < 2 {
+    if args.len() == 0 {
         print_usage();
         return Ok(None);
+    } else if args.len() < 2 {
+        bail!("Not enough arguments");
     }
 
     let command: Command = args[0].parse()?;
@@ -79,9 +84,19 @@ fn parse_args() -> Result<Option<Options>> {
     let api_key = parse_api_key()?;
     let config = Config::new(api_key);
 
+    // determine the workspace id
+    if command == Command::List && resource == Resource::Project {
+        if args.len() < 3 {
+            bail!("Missing workspace ID");
+        } else {
+            workspace_id = args[2].clone();
+        }
+    }
+
     Ok(Some(Options {
         command,
         resource,
+        workspace_id,
         config,
     }))
 }
@@ -94,6 +109,15 @@ async fn command_list(options: Options) -> Result<()> {
             let workspaces = client.get_workspaces().await?;
             for workspace in workspaces.iter() {
                 println!("ID={}, Name={}", workspace.id, workspace.name);
+            }
+        }
+        Resource::Project => {
+            let projects = client.get_projects(&options.workspace_id).await?;
+            for project in projects.iter() {
+                println!(
+                    "ID={}, Name={}, Billable={}",
+                    project.id, project.name, project.billable
+                );
             }
         }
         _ => {

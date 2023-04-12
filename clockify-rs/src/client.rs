@@ -1,4 +1,4 @@
-use crate::{uri_builder::URIBuilder, Config, Error, Workspace};
+use crate::{uri_builder::URIBuilder, Config, Error, Project, Workspace};
 
 use hyper::{body::Buf, client::HttpConnector, Body, Method, Request, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
@@ -35,6 +35,15 @@ impl Client {
     pub async fn get_workspaces(&self) -> Result<Vec<Workspace>, Error> {
         let uri = self.uri_builder.get_workspaces();
         self.get_resource(uri).await
+    }
+
+    /// Returns the list of existing projects within the specified workspace.
+    ///
+    /// # Arguments
+    /// * `workspace_id` - The workspace whose projects will be returned.
+    pub async fn get_projects(&self, workspace_id: &str) -> Result<Vec<Project>, Error> {
+        let uri = self.uri_builder.get_projects(workspace_id)?;
+        self.get_resource(&uri).await
     }
 
     /// Sends a GET request to the specified URI to deserialize a json afterwards.
