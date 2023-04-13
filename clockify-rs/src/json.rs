@@ -37,6 +37,22 @@ pub struct ProjectInfo {
 
 /// A single task within a project
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UserInfo {
+    pub id: String,
+    pub name: String,
+    pub status: String,
+}
+
+/// A single task within a project
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct User {
+    pub name: String,
+    pub status: String,
+    pub email: String,
+}
+
+/// A single task within a project
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Task {
     pub id: String,
     pub name: String,

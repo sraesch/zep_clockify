@@ -8,6 +8,7 @@ use clockify_rs::{Client, Config};
 enum Resource {
     Workspace,
     Project,
+    User,
 }
 
 impl FromStr for Resource {
@@ -17,6 +18,7 @@ impl FromStr for Resource {
         match s {
             "workspace" => Ok(Self::Workspace),
             "project" => Ok(Self::Project),
+            "user" => Ok(Self::User),
             _ => bail!("Unknown resource {}", s),
         }
     }
@@ -62,6 +64,7 @@ fn print_usage() {
     println!("There are the following resource available:");
     println!("workspace: A workspace that potentially contains multiple projects");
     println!("project: Projects within a workspace. Needs to specify the workspace ID.");
+    println!("user: Users within a workspace. Needs to specify the workspace ID.");
 }
 
 /// Parses the API key from the environment variable API_KEY.
@@ -135,6 +138,12 @@ async fn command_list(options: Options) -> Result<()> {
                     "ID={}, Name={}, Billable={}",
                     project.id, project.name, project.billable
                 );
+            }
+        }
+        Resource::User => {
+            let users = client.get_users(&options.workspace_id).await?;
+            for user in users.iter() {
+                println!("ID={}, Name={}, Status={}", user.id, user.name, user.status);
             }
         }
         _ => {

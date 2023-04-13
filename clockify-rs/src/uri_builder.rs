@@ -26,16 +26,6 @@ impl URIBuilder {
         })
     }
 
-    /// Returns the server address, i.e., ${HOST}:${PORT}
-    pub fn get_server_address(&self) -> String {
-        let host = self.base_uri.host().expect("uri has no host");
-        let port = self.base_uri.port_u16().unwrap_or(80);
-
-        let address = format!("{}:{}", host, port);
-
-        address
-    }
-
     pub fn get_workspaces(&self) -> &Uri {
         &self.workspaces_uri
     }
@@ -47,6 +37,11 @@ impl URIBuilder {
 
     pub fn get_project(&self, workspace_id: &str, project_id: &str) -> Result<Uri, Error> {
         let sub_path = format!("workspaces/{}/projects/{}", workspace_id, project_id);
+        Self::build_uri(&self.base_uri, &sub_path)
+    }
+
+    pub fn get_users(&self, workspace_id: &str) -> Result<Uri, Error> {
+        let sub_path = format!("workspaces/{}/users", workspace_id);
         Self::build_uri(&self.base_uri, &sub_path)
     }
 
@@ -113,11 +108,6 @@ mod test {
         assert_eq!(
             uri_builder.get_workspaces().to_string(),
             "https://hello.world/v1/workspaces"
-        );
-
-        assert_eq!(
-            uri_builder.get_server_address().to_string(),
-            "hello.world:80"
         );
     }
 }
