@@ -12,10 +12,33 @@ pub struct WorkspaceHeader {
 pub struct ProjectHeader {
     pub id: String,
 
+    pub name: String,
+    pub billable: bool,
+
+    pub public: bool,
+}
+
+/// The high level header information for the project
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProjectInfo {
+    pub id: String,
+
     #[serde(rename = "clientId")]
     pub client_id: String,
     pub name: String,
     pub billable: bool,
 
     pub public: bool,
+
+    pub color: String,
+
+    pub note: String,
+}
+
+/// A single task within a project
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Task {
+    pub id: String,
+    pub name: String,
+    pub status: String,
 }

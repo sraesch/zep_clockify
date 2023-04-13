@@ -27,6 +27,9 @@ impl FromStr for Resource {
 enum Command {
     /// Lists all projects, workspaces,...
     List,
+
+    /// Gives detailed info about the resource
+    Info,
 }
 
 impl FromStr for Command {
@@ -35,6 +38,7 @@ impl FromStr for Command {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "list" => Ok(Self::List),
+            "info" => Ok(Self::Info),
             _ => bail!("Unknown command {}", s),
         }
     }
@@ -45,6 +49,7 @@ struct Options {
     pub command: Command,
     pub resource: Resource,
     pub workspace_id: String,
+    pub project_id: String,
 }
 
 /// Prints the usage of the CLI.
@@ -52,6 +57,7 @@ fn print_usage() {
     println!("clockify_cli <command> <resource> [<args>]\n\n");
     println!("There are the following commands available:");
     println!("list: List all objects of the specified resource");
+    println!("info: Prints detailed info about the specified resource");
     println!("");
     println!("There are the following resource available:");
     println!("workspace: A workspace that potentially contains multiple projects");
@@ -67,6 +73,7 @@ fn parse_api_key() -> Result<String> {
 /// Parses all arguments provided by the program arguments and environment variables.
 fn parse_args() -> Result<Option<Options>> {
     let mut workspace_id = String::new();
+    let mut project_id = String::new();
 
     let args: Vec<String> = std::env::args().collect();
     let args = &args[1..];
@@ -85,11 +92,20 @@ fn parse_args() -> Result<Option<Options>> {
     let config = Config::new(api_key);
 
     // determine the workspace id
-    if command == Command::List && resource == Resource::Project {
+    if command == Command::Info || resource != Resource::Workspace {
         if args.len() < 3 {
             bail!("Missing workspace ID");
         } else {
             workspace_id = args[2].clone();
+        }
+
+        // check if there is a project ID
+        if command == Command::Info && resource == Resource::Project {
+            if args.len() < 4 {
+                bail!("Missing project ID");
+            } else {
+                project_id = args[3].clone();
+            }
         }
     }
 
@@ -97,6 +113,7 @@ fn parse_args() -> Result<Option<Options>> {
         command,
         resource,
         workspace_id,
+        project_id,
         config,
     }))
 }
@@ -128,6 +145,48 @@ async fn command_list(options: Options) -> Result<()> {
     Ok(())
 }
 
+async fn command_info(options: Options) -> Result<()> {
+    let client = Client::new(options.config.clone()).await?;
+
+    match options.resource {
+        Resource::Workspace => {
+            let workspaces = client.get_workspaces().await?;
+            match workspaces.iter().find(|w| w.id == options.workspace_id) {
+                None => {
+                    bail!("Cannot find workspace with ID '{}'", options.workspace_id);
+                }
+                Some(w) => {
+                    println!("Workspace Info:\n");
+                    println!("ID:\t{}", w.id);
+                    println!("Name:\t{}", w.name);
+                    println!("");
+                }
+            }
+        }
+        Resource::Project => {
+            let project = client
+                .get_project(&options.workspace_id, &options.project_id)
+                .await?;
+
+            println!("Project Info:\n");
+            println!("ID:       {}", project.id);
+            println!("ClientID: {}", project.client_id);
+            println!("Name:     {}", project.name);
+            println!("Billable: {}", project.billable);
+            println!("Public:   {}", project.public);
+            println!("Color:    {}", project.color);
+            println!("Note:\n{}", project.note);
+
+            println!("");
+        }
+        _ => {
+            bail!("Resource {:?} not implemented yet", options.resource);
+        }
+    }
+
+    Ok(())
+}
+
 /// Runs the program with the given program options
 ///
 /// # Arguments
@@ -135,6 +194,7 @@ async fn command_list(options: Options) -> Result<()> {
 async fn run_program(options: Options) -> Result<()> {
     match options.command {
         Command::List => command_list(options).await,
+        Command::Info => command_info(options).await,
     }
 }
 
